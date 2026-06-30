@@ -19,10 +19,13 @@ No build step, package installation, or development environment is required.
 
 - Neon arcade visual style
 - Canvas-rendered board, snake, food, particles, trails, flashes, and screen shake
+- Programmatic Web Audio sound effects for start, food, level-up, pause, and game over
+- Player name gate with returning-player confirmation and welcome toasts
+- Shared Supabase leaderboard with player names, best scores, and achievement time
 - Score, best score, level, and speed HUD
 - Progressive speed increase every 5 foods
 - Wall and self-collision game-over logic
-- Best score saved with `localStorage`
+- Local fallback cache with `localStorage` when the leaderboard network is unavailable
 - Responsive layout for desktop and mobile browsers
 
 ## Project Files

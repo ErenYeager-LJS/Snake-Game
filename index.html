@@ -55,6 +55,7 @@
           <button id="startBtn" class="action primary" type="button">Start</button>
           <button id="pauseBtn" class="action" type="button">Pause</button>
           <button id="restartBtn" class="action" type="button">Restart</button>
+          <button id="recordsBtn" class="action" type="button">Records</button>
         </div>
 
         <div class="dpad" aria-label="Direction controls">
@@ -65,6 +66,47 @@
         </div>
       </footer>
     </section>
+
+    <section class="modal visible" id="playerModal" aria-label="Player profile">
+      <div class="modal-panel player-panel">
+        <span class="modal-kicker">CHALLENGER ID</span>
+        <h2>输入你的名字吧，挑战者</h2>
+        <div class="field-row">
+          <input id="playerNameInput" class="neon-input" maxlength="24" autocomplete="nickname" placeholder="输入或搜索名字">
+          <button id="playerStartBtn" class="action primary" type="button">Enter</button>
+        </div>
+        <div class="suggestions" id="playerSuggestions"></div>
+        <p class="modal-note" id="playerHint">已有记录会自动出现在搜索结果里。</p>
+      </div>
+    </section>
+
+    <section class="modal" id="confirmPlayerModal" aria-label="Confirm player">
+      <div class="modal-panel compact-panel">
+        <span class="modal-kicker">RETURNING PLAYER</span>
+        <h2>确认这个是你？</h2>
+        <p id="confirmPlayerText"></p>
+        <div class="modal-actions">
+          <button id="confirmPlayerBtn" class="action primary" type="button">Confirm</button>
+          <button id="cancelConfirmPlayerBtn" class="action" type="button">Change</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="modal" id="recordsModal" aria-label="Records table">
+      <div class="modal-panel records-panel">
+        <div class="records-head">
+          <div>
+            <span class="modal-kicker">LEADERBOARD</span>
+            <h2>Records</h2>
+          </div>
+          <button id="closeRecordsBtn" class="action" type="button">Close</button>
+        </div>
+        <input id="recordsSearchInput" class="neon-input" maxlength="24" placeholder="搜索玩家">
+        <div class="records-table" id="recordsTable"></div>
+      </div>
+    </section>
+
+    <div class="toast-lane" id="toastLane" aria-live="polite"></div>
   </main>
 
   <script src="./script.js"></script>

@@ -8,6 +8,9 @@ const {
   stepGame,
   togglePause,
   restartGame,
+  normalizePlayerName,
+  createPlayerKey,
+  mergeLeaderboardRecord,
 } = require("./script.js");
 
 test("createInitialState creates a valid snake and food", () => {
@@ -131,4 +134,39 @@ test("restartGame resets active state and preserves best score", () => {
   assert.equal(restarted.bestScore, 900);
   assert.equal(restarted.mode, "running");
   assert.equal(restarted.gridSize, 8);
+});
+
+test("normalizePlayerName trims whitespace and limits length", () => {
+  assert.equal(normalizePlayerName("  Neon   Player  "), "Neon Player");
+  assert.equal(normalizePlayerName("abcdefghijklmnopqrstuvwxy"), "abcdefghijklmnopqrstuvwx");
+});
+
+test("createPlayerKey makes case-insensitive player identities", () => {
+  assert.equal(createPlayerKey("  Alice  "), "alice");
+  assert.equal(createPlayerKey("ALICE"), "alice");
+});
+
+test("mergeLeaderboardRecord creates and updates only better scores", () => {
+  const first = mergeLeaderboardRecord([], "Alice", 120, "2026-07-01T10:00:00.000Z");
+  assert.deepEqual(first, [
+    {
+      player_key: "alice",
+      display_name: "Alice",
+      best_score: 120,
+      achieved_at: "2026-07-01T10:00:00.000Z",
+    },
+  ]);
+
+  const unchanged = mergeLeaderboardRecord(first, "alice", 90, "2026-07-01T11:00:00.000Z");
+  assert.deepEqual(unchanged, first);
+
+  const updated = mergeLeaderboardRecord(first, "ALICE", 220, "2026-07-01T12:00:00.000Z");
+  assert.deepEqual(updated, [
+    {
+      player_key: "alice",
+      display_name: "ALICE",
+      best_score: 220,
+      achieved_at: "2026-07-01T12:00:00.000Z",
+    },
+  ]);
 });

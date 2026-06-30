@@ -291,14 +291,14 @@ button {
 
 .dpad {
   display: grid;
-  grid-template-columns: repeat(3, 50px);
-  grid-template-rows: repeat(3, 44px);
-  gap: 6px;
+  grid-template-columns: repeat(3, 75px);
+  grid-template-rows: repeat(3, 66px);
+  gap: 9px;
 }
 
 .dir {
-  border-radius: 6px;
-  font-size: 18px;
+  border-radius: 8px;
+  font-size: 27px;
   font-weight: 900;
 }
 
@@ -320,6 +320,178 @@ button {
 .dir.down {
   grid-column: 2;
   grid-row: 3;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: none;
+  place-items: center;
+  padding: 18px;
+  background: rgba(2, 5, 10, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.modal.visible {
+  display: grid;
+}
+
+.modal-panel {
+  width: min(560px, 100%);
+  padding: 24px;
+  border: 1px solid rgba(98, 247, 255, 0.3);
+  background: rgba(7, 12, 22, 0.92);
+  box-shadow: 0 0 46px rgba(98, 247, 255, 0.18), inset 0 0 34px rgba(255, 79, 210, 0.08);
+}
+
+.modal-kicker {
+  color: var(--pink);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.modal-panel h2 {
+  margin: 10px 0 16px;
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.05;
+  text-shadow: 0 0 24px rgba(98, 247, 255, 0.58);
+}
+
+.field-row {
+  display: flex;
+  gap: 10px;
+}
+
+.neon-input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(98, 247, 255, 0.25);
+  border-radius: 6px;
+  outline: none;
+  color: var(--text);
+  background: rgba(3, 7, 13, 0.84);
+  box-shadow: inset 0 0 16px rgba(98, 247, 255, 0.05);
+  font: 800 16px inherit;
+}
+
+.neon-input:focus {
+  border-color: rgba(156, 255, 74, 0.72);
+  box-shadow: 0 0 22px rgba(156, 255, 74, 0.16), inset 0 0 16px rgba(98, 247, 255, 0.08);
+}
+
+.suggestions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid rgba(98, 247, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(12, 18, 31, 0.82);
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  border-color: rgba(255, 209, 102, 0.65);
+}
+
+.suggestion strong,
+.record-name {
+  color: var(--green);
+}
+
+.suggestion span,
+.modal-note,
+.record-date {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.compact-panel {
+  width: min(430px, 100%);
+}
+
+.modal-actions,
+.records-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.records-panel {
+  width: min(720px, 100%);
+}
+
+.records-head h2 {
+  margin-bottom: 0;
+}
+
+.records-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  max-height: min(54vh, 520px);
+  overflow: auto;
+}
+
+.record-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 110px 190px;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid rgba(98, 247, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(8, 13, 24, 0.78);
+}
+
+.record-rank,
+.record-score {
+  color: var(--amber);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-records {
+  padding: 24px;
+  border: 1px dashed rgba(98, 247, 255, 0.2);
+  color: var(--muted);
+  text-align: center;
+}
+
+.toast-lane {
+  position: fixed;
+  inset: auto 18px 18%;
+  z-index: 20;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+
+.toast {
+  padding: 12px 18px;
+  border: 1px solid rgba(156, 255, 74, 0.5);
+  border-radius: 999px;
+  color: #07100c;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  box-shadow: 0 0 32px rgba(156, 255, 74, 0.28);
+  font-weight: 950;
+  animation: toast-fly 2.8s ease forwards;
 }
 
 @keyframes flare {
@@ -345,6 +517,22 @@ button {
   }
   75% {
     transform: translate(3px, 4px);
+  }
+}
+
+@keyframes toast-fly {
+  0% {
+    opacity: 0;
+    transform: translateY(26px) scale(0.92);
+  }
+  16%,
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-38px) scale(1.04);
   }
 }
 
@@ -379,6 +567,21 @@ button {
 
   .dpad {
     align-self: center;
+  }
+
+  .field-row,
+  .modal-actions,
+  .records-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .record-row {
+    grid-template-columns: 42px minmax(0, 1fr) 82px;
+  }
+
+  .record-date {
+    grid-column: 2 / 4;
   }
 }
 

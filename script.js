@@ -161,6 +161,41 @@
     });
   }
 
+  function normalizePlayerName(name) {
+    return String(name || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 24);
+  }
+
+  function createPlayerKey(name) {
+    return normalizePlayerName(name).toLocaleLowerCase();
+  }
+
+  function mergeLeaderboardRecord(records, displayName, score, achievedAt = new Date().toISOString()) {
+    const normalized = normalizePlayerName(displayName);
+    const playerKey = createPlayerKey(normalized);
+    if (!playerKey) return [...records];
+
+    const nextRecord = {
+      player_key: playerKey,
+      display_name: normalized,
+      best_score: Math.max(0, Number(score) || 0),
+      achieved_at: achievedAt,
+    };
+
+    const existing = records.find((record) => record.player_key === playerKey);
+    if (existing && existing.best_score >= nextRecord.best_score) {
+      return [...records];
+    }
+
+    const withoutExisting = records.filter((record) => record.player_key !== playerKey);
+    return [...withoutExisting, nextRecord].sort((a, b) => {
+      if (b.best_score !== a.best_score) return b.best_score - a.best_score;
+      return new Date(b.achieved_at).getTime() - new Date(a.achieved_at).getTime();
+    });
+  }
+
   const api = {
     DIRECTIONS,
     createInitialState,
@@ -169,9 +204,14 @@
     stepGame,
     togglePause,
     restartGame,
+    normalizePlayerName,
+    createPlayerKey,
+    mergeLeaderboardRecord,
   };
 
   function startBrowserGame() {
+    const SUPABASE_URL = "https://omjjsiocfiovzbsrnwdi.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_O-JOgFyrS4267KpMlUUrZw_ZnFUseb8";
     const canvas = document.getElementById("gameCanvas");
     if (!canvas) return;
 
@@ -182,6 +222,21 @@
     const stateTitle = document.getElementById("stateTitle");
     const stateText = document.getElementById("stateText");
     const flare = document.getElementById("screenFlare");
+    const playerModal = document.getElementById("playerModal");
+    const confirmPlayerModal = document.getElementById("confirmPlayerModal");
+    const recordsModal = document.getElementById("recordsModal");
+    const playerNameInput = document.getElementById("playerNameInput");
+    const playerStartBtn = document.getElementById("playerStartBtn");
+    const playerSuggestions = document.getElementById("playerSuggestions");
+    const playerHint = document.getElementById("playerHint");
+    const confirmPlayerText = document.getElementById("confirmPlayerText");
+    const confirmPlayerBtn = document.getElementById("confirmPlayerBtn");
+    const cancelConfirmPlayerBtn = document.getElementById("cancelConfirmPlayerBtn");
+    const recordsBtn = document.getElementById("recordsBtn");
+    const closeRecordsBtn = document.getElementById("closeRecordsBtn");
+    const recordsSearchInput = document.getElementById("recordsSearchInput");
+    const recordsTable = document.getElementById("recordsTable");
+    const toastLane = document.getElementById("toastLane");
     const hud = {
       score: document.getElementById("score"),
       bestScore: document.getElementById("bestScore"),
@@ -190,8 +245,14 @@
     };
 
     const storageKey = "neon-snake-best-score";
+    const playerStorageKey = "neon-snake-current-player";
+    const leaderboardStorageKey = "neon-snake-leaderboard";
     let state = createInitialState({ bestScore: loadBestScore() });
     state.mode = "ready";
+    let currentPlayer = null;
+    let pendingPlayer = null;
+    let leaderboard = loadLocalLeaderboard();
+    let scoreSubmittedForRound = false;
 
     let particles = [];
     let trails = [];
@@ -200,6 +261,87 @@
     let accumulator = 0;
     let viewSize = 900;
     let dpr = 1;
+    let audioContext = null;
+
+    function getAudioContext() {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return null;
+      if (!audioContext) audioContext = new AudioCtor();
+      if (audioContext.state === "suspended") audioContext.resume();
+      return audioContext;
+    }
+
+    function tone(frequency, start, duration, type, gain, endFrequency) {
+      const audio = getAudioContext();
+      if (!audio) return;
+
+      const oscillator = audio.createOscillator();
+      const amp = audio.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, start);
+      if (endFrequency) {
+        oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), start + duration);
+      }
+      amp.gain.setValueAtTime(0.0001, start);
+      amp.gain.exponentialRampToValueAtTime(gain, start + 0.015);
+      amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      oscillator.connect(amp);
+      amp.connect(audio.destination);
+      oscillator.start(start);
+      oscillator.stop(start + duration + 0.03);
+    }
+
+    function noiseBurst(start, duration, gain) {
+      const audio = getAudioContext();
+      if (!audio) return;
+
+      const bufferSize = Math.max(1, Math.floor(audio.sampleRate * duration));
+      const buffer = audio.createBuffer(1, bufferSize, audio.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+      }
+
+      const source = audio.createBufferSource();
+      const filter = audio.createBiquadFilter();
+      const amp = audio.createGain();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(900, start);
+      filter.frequency.exponentialRampToValueAtTime(120, start + duration);
+      amp.gain.setValueAtTime(gain, start);
+      amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      source.buffer = buffer;
+      source.connect(filter);
+      filter.connect(amp);
+      amp.connect(audio.destination);
+      source.start(start);
+      source.stop(start + duration);
+    }
+
+    function playSound(name) {
+      const audio = getAudioContext();
+      if (!audio) return;
+      const now = audio.currentTime;
+
+      if (name === "start") {
+        tone(196, now, 0.08, "sine", 0.06, 392);
+        tone(392, now + 0.08, 0.09, "triangle", 0.07, 784);
+      } else if (name === "eat") {
+        tone(540, now, 0.055, "triangle", 0.055, 880);
+        tone(980, now + 0.04, 0.07, "sine", 0.04, 1320);
+      } else if (name === "level") {
+        tone(330, now, 0.08, "square", 0.045, 660);
+        tone(495, now + 0.07, 0.08, "square", 0.045, 990);
+        tone(740, now + 0.14, 0.12, "triangle", 0.055, 1480);
+      } else if (name === "pause") {
+        tone(360, now, 0.07, "sine", 0.035, 180);
+      } else if (name === "gameover") {
+        tone(220, now, 0.24, "sawtooth", 0.07, 130);
+        tone(146, now + 0.14, 0.32, "square", 0.055, 74);
+        tone(92, now + 0.36, 0.42, "sawtooth", 0.065, 46);
+        noiseBurst(now + 0.05, 0.55, 0.12);
+      }
+    }
 
     function loadBestScore() {
       try {
@@ -214,6 +356,223 @@
         localStorage.setItem(storageKey, String(value));
       } catch (_error) {
         // Storage can be unavailable for local files in some browser modes.
+      }
+    }
+
+    function loadLocalLeaderboard() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(leaderboardStorageKey) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_error) {
+        return [];
+      }
+    }
+
+    function saveLocalLeaderboard(records) {
+      leaderboard = records.slice(0, 100);
+      try {
+        localStorage.setItem(leaderboardStorageKey, JSON.stringify(leaderboard));
+      } catch (_error) {
+        // Local fallback is best effort only.
+      }
+    }
+
+    function loadSavedPlayer() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(playerStorageKey) || "null");
+        if (saved && saved.player_key && saved.display_name) return saved;
+      } catch (_error) {
+        // Ignore invalid saved profile data.
+      }
+      return null;
+    }
+
+    function saveCurrentPlayer(player) {
+      try {
+        localStorage.setItem(playerStorageKey, JSON.stringify(player));
+      } catch (_error) {
+        // Player selection is recoverable.
+      }
+    }
+
+    async function supabaseRequest(path, options = {}) {
+      const response = await fetch(`${SUPABASE_URL}${path}`, {
+        ...options,
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Supabase request failed: ${response.status}`);
+      }
+
+      if (response.status === 204) return null;
+      return response.json();
+    }
+
+    async function fetchRemoteLeaderboard() {
+      const rows = await supabaseRequest(
+        "/rest/v1/leaderboard?select=player_key,display_name,best_score,achieved_at&order=best_score.desc,achieved_at.desc&limit=100",
+      );
+      if (Array.isArray(rows)) {
+        saveLocalLeaderboard(rows);
+      }
+      return leaderboard;
+    }
+
+    async function submitRemoteScore(displayName, score) {
+      const rows = await supabaseRequest("/rest/v1/rpc/submit_score", {
+        method: "POST",
+        body: JSON.stringify({
+          p_display_name: displayName,
+          p_score: score,
+        }),
+      });
+      if (Array.isArray(rows) && rows[0]) {
+        saveLocalLeaderboard(mergeLeaderboardRecord(leaderboard, rows[0].display_name, rows[0].best_score, rows[0].achieved_at));
+      }
+      return rows;
+    }
+
+    function showToast(message) {
+      const toast = document.createElement("div");
+      toast.className = "toast";
+      toast.textContent = message;
+      toastLane.appendChild(toast);
+      window.setTimeout(() => toast.remove(), 3000);
+    }
+
+    function setModalVisible(modal, visible) {
+      modal.classList.toggle("visible", visible);
+    }
+
+    function formatDate(value) {
+      if (!value) return "-";
+      return new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value));
+    }
+
+    function matchingPlayers(query) {
+      const key = createPlayerKey(query);
+      return leaderboard
+        .filter((record) => !key || record.player_key.includes(key) || createPlayerKey(record.display_name).includes(key))
+        .slice(0, 8);
+    }
+
+    function renderPlayerSuggestions() {
+      const matches = matchingPlayers(playerNameInput.value);
+      playerSuggestions.innerHTML = "";
+      for (const record of matches) {
+        const button = document.createElement("button");
+        button.className = "suggestion";
+        button.type = "button";
+        button.innerHTML = `<strong>${record.display_name}</strong><span>${record.best_score} · ${formatDate(record.achieved_at)}</span>`;
+        button.addEventListener("click", () => askPlayerConfirmation(record));
+        playerSuggestions.appendChild(button);
+      }
+      playerHint.textContent = matches.length ? "点击已有名字需要确认身份。" : "没有找到旧记录，输入后将作为新选手加入。";
+    }
+
+    function renderRecords() {
+      const query = recordsSearchInput.value;
+      const rows = matchingPlayers(query);
+      recordsTable.innerHTML = "";
+
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty-records";
+        empty.textContent = "暂无记录";
+        recordsTable.appendChild(empty);
+        return;
+      }
+
+      rows.forEach((record, index) => {
+        const row = document.createElement("div");
+        row.className = "record-row";
+        row.innerHTML = `
+          <div class="record-rank">#${index + 1}</div>
+          <div class="record-name">${record.display_name}</div>
+          <div class="record-score">${record.best_score}</div>
+          <div class="record-date">${formatDate(record.achieved_at)}</div>
+        `;
+        recordsTable.appendChild(row);
+      });
+    }
+
+    function askPlayerConfirmation(record) {
+      pendingPlayer = record;
+      confirmPlayerText.textContent = `${record.display_name} · 最高分 ${record.best_score}`;
+      setModalVisible(confirmPlayerModal, true);
+    }
+
+    function applyPlayer(record, returning) {
+      currentPlayer = {
+        player_key: record.player_key,
+        display_name: record.display_name,
+      };
+      saveCurrentPlayer(currentPlayer);
+      setModalVisible(playerModal, false);
+      setModalVisible(confirmPlayerModal, false);
+      showToast(returning ? "欢迎你，老家伙" : "欢迎你，新来的");
+      syncHud();
+    }
+
+    function submitPlayerName() {
+      const name = normalizePlayerName(playerNameInput.value);
+      if (!name) {
+        playerHint.textContent = "先留下名字，再进场。";
+        return;
+      }
+
+      const key = createPlayerKey(name);
+      const existing = leaderboard.find((record) => record.player_key === key);
+      if (existing) {
+        askPlayerConfirmation(existing);
+        return;
+      }
+
+      const record = {
+        player_key: key,
+        display_name: name,
+        best_score: 0,
+        achieved_at: new Date().toISOString(),
+      };
+      saveLocalLeaderboard(mergeLeaderboardRecord(leaderboard, name, 0, record.achieved_at));
+      applyPlayer(record, false);
+    }
+
+    async function refreshLeaderboard() {
+      try {
+        await fetchRemoteLeaderboard();
+      } catch (_error) {
+        // Keep using locally cached records if the network is unavailable.
+      }
+      renderPlayerSuggestions();
+      renderRecords();
+    }
+
+    async function recordFinalScore() {
+      if (!currentPlayer || scoreSubmittedForRound) return;
+      scoreSubmittedForRound = true;
+
+      const achievedAt = new Date().toISOString();
+      saveLocalLeaderboard(mergeLeaderboardRecord(leaderboard, currentPlayer.display_name, state.score, achievedAt));
+      renderRecords();
+
+      try {
+        await submitRemoteScore(currentPlayer.display_name, state.score);
+        await refreshLeaderboard();
+      } catch (_error) {
+        renderRecords();
       }
     }
 
@@ -233,28 +592,43 @@
     }
 
     function startRound() {
+      if (!currentPlayer) {
+        setModalVisible(playerModal, true);
+        playerNameInput.focus();
+        return;
+      }
       if (state.mode === "ready" || state.mode === "gameover") {
         const bestScore = state.bestScore;
         state = restartGame({ gridSize: state.gridSize, bestScore });
+        scoreSubmittedForRound = false;
         particles = [];
         trails = [];
         shockwaves = [];
         burstAt(state.snake[0], "#62f7ff", 34, 1.3);
         pulseScreen();
+        playSound("start");
       } else if (state.mode === "paused") {
         setMode("running");
+        playSound("start");
       }
       syncHud();
     }
 
     function restartRound() {
+      if (!currentPlayer) {
+        setModalVisible(playerModal, true);
+        playerNameInput.focus();
+        return;
+      }
       const bestScore = state.bestScore;
       state = restartGame({ gridSize: state.gridSize, bestScore });
+      scoreSubmittedForRound = false;
       particles = [];
       trails = [];
       shockwaves = [];
       burstAt(state.snake[0], "#9cff4a", 42, 1.45);
       pulseScreen();
+      playSound("start");
       syncHud();
     }
 
@@ -262,6 +636,7 @@
       if (state.mode === "ready") return;
       state = togglePause(state);
       pulseScreen();
+      playSound("pause");
       syncHud();
     }
 
@@ -328,11 +703,13 @@
         if (effect.type === "eat") {
           burstAt({ x: effect.x, y: effect.y }, "#ff4fd2", 28, 1.15);
           pulseScreen();
+          playSound("eat");
         }
         if (effect.type === "level") {
           burstAt(next.snake[0], "#ffd166", 64, 1.6);
           shockwaves.push({ ...cellCenter(next.snake[0]), life: 520, maxLife: 520 });
           shakeStage();
+          playSound("level");
         }
       }
       next.effects = [];
@@ -375,6 +752,8 @@
           shockwaves.push({ ...cellCenter(state.snake[0]), life: 700, maxLife: 700 });
           shakeStage();
           pulseScreen();
+          playSound("gameover");
+          recordFinalScore();
         }
       }
     }
@@ -580,8 +959,8 @@
         stateText.textContent = `SCORE ${state.score}`;
       } else if (state.mode === "gameover") {
         stateLabel.textContent = state.reason === "wall" ? "WALL HIT" : "SIGNAL LOST";
-        stateTitle.textContent = "GAME OVER";
-        stateText.textContent = `SCORE ${state.score}`;
+        stateTitle.textContent = "菜，就多练";
+        stateText.textContent = `SCORE ${state.score} · PRESS ENTER`;
       }
     }
 
@@ -621,6 +1000,28 @@
     document.getElementById("startBtn").addEventListener("click", startRound);
     document.getElementById("pauseBtn").addEventListener("click", pauseRound);
     document.getElementById("restartBtn").addEventListener("click", restartRound);
+    recordsBtn.addEventListener("click", async () => {
+      setModalVisible(recordsModal, true);
+      recordsSearchInput.value = "";
+      renderRecords();
+      await refreshLeaderboard();
+      recordsSearchInput.focus();
+    });
+    closeRecordsBtn.addEventListener("click", () => setModalVisible(recordsModal, false));
+    playerStartBtn.addEventListener("click", submitPlayerName);
+    playerNameInput.addEventListener("input", renderPlayerSuggestions);
+    playerNameInput.addEventListener("keydown", (event) => {
+      if (event.code === "Enter") submitPlayerName();
+    });
+    confirmPlayerBtn.addEventListener("click", () => {
+      if (pendingPlayer) applyPlayer(pendingPlayer, true);
+    });
+    cancelConfirmPlayerBtn.addEventListener("click", () => {
+      pendingPlayer = null;
+      setModalVisible(confirmPlayerModal, false);
+      playerNameInput.focus();
+    });
+    recordsSearchInput.addEventListener("input", renderRecords);
 
     document.querySelectorAll("[data-dir]").forEach((button) => {
       button.addEventListener("pointerdown", (event) => {
@@ -631,6 +1032,11 @@
 
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
+    const savedPlayer = loadSavedPlayer();
+    if (savedPlayer) {
+      playerNameInput.value = savedPlayer.display_name;
+    }
+    refreshLeaderboard();
     syncHud();
     requestAnimationFrame(loop);
   }
