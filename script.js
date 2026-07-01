@@ -19,6 +19,7 @@
       food: { ...state.food },
       direction: { ...state.direction },
       pendingDirection: { ...state.pendingDirection },
+      directionQueue: (state.directionQueue || []).map((direction) => ({ ...direction })),
       effects: state.effects ? [...state.effects] : [],
     };
   }
@@ -29,6 +30,27 @@
       return { ...current };
     }
     return { ...requested };
+  }
+
+  function queueDirection(state, requested) {
+    if (!requested) return cloneState(state);
+    const next = cloneState(state);
+    const queue = next.directionQueue || [];
+    const baseDirection = queue.length ? queue[queue.length - 1] : next.direction;
+    const accepted = nextDirection(baseDirection, requested);
+
+    if (accepted.x === baseDirection.x && accepted.y === baseDirection.y) {
+      return next;
+    }
+
+    if (queue.length >= 3) {
+      queue.shift();
+    }
+
+    queue.push(accepted);
+    next.directionQueue = queue;
+    next.pendingDirection = queue[0] || accepted;
+    return next;
   }
 
   function createFood(state, rng = Math.random) {
@@ -73,10 +95,11 @@
       bestScore: options.bestScore || 0,
       level: 1,
       foodsEaten: 0,
-      speedMs: 130,
+      speedMs: 260,
       snake,
       direction: { ...DIRECTIONS.right },
       pendingDirection: { ...DIRECTIONS.right },
+      directionQueue: [],
       food: { x: 0, y: 0 },
       reason: "",
       effects: [],
@@ -86,7 +109,7 @@
   }
 
   function speedForLevel(level) {
-    return Math.max(54, 130 - (level - 1) * 10);
+    return Math.max(108, 260 - (level - 1) * 20);
   }
 
   function stepGame(state, rng = Math.random) {
@@ -95,7 +118,10 @@
     }
 
     const next = cloneState(state);
-    const direction = nextDirection(next.direction, next.pendingDirection);
+    const queuedDirection = next.directionQueue && next.directionQueue.length
+      ? next.directionQueue.shift()
+      : next.pendingDirection;
+    const direction = nextDirection(next.direction, queuedDirection);
     const head = next.snake[0];
     const newHead = {
       x: head.x + direction.x,
@@ -103,7 +129,7 @@
     };
 
     next.direction = direction;
-    next.pendingDirection = direction;
+    next.pendingDirection = next.directionQueue && next.directionQueue.length ? next.directionQueue[0] : direction;
 
     if (
       newHead.x < 0 ||
@@ -201,6 +227,7 @@
     createInitialState,
     createFood,
     nextDirection,
+    queueDirection,
     stepGame,
     togglePause,
     restartGame,
@@ -643,7 +670,7 @@
     function requestDirection(direction) {
       if (state.mode === "ready") startRound();
       if (state.mode !== "running") return;
-      state.pendingDirection = nextDirection(state.direction, direction);
+      state = queueDirection(state, direction);
     }
 
     function cellCenter(cell) {
@@ -944,7 +971,7 @@
       hud.score.textContent = String(state.score);
       hud.bestScore.textContent = String(state.bestScore);
       hud.level.textContent = String(state.level);
-      hud.speed.textContent = `${(130 / state.speedMs).toFixed(1)}x`;
+      hud.speed.textContent = `${(260 / state.speedMs).toFixed(1)}x`;
 
       const visible = state.mode !== "running";
       overlay.classList.toggle("visible", visible);

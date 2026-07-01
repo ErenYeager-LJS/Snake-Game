@@ -96,6 +96,8 @@ The working RPC function was fixed to avoid PL/pgSQL `player_key` ambiguity by u
 - Player identity is case-insensitive via `createPlayerKey`.
 - Returning player selection requires confirmation; saved local player names only prefill the input and do not bypass confirmation.
 - Scores only update when the new score is higher than the existing best score.
+- Movement input uses `directionQueue`; this preserves rapid valid turns across movement ticks instead of overwriting a single pending direction.
+- Initial speed is intentionally slow: `speedMs` starts at `260`, which is half the original game speed. Level speed uses the same doubled timing scale.
 - Shared leaderboard reads/writes Supabase. If Supabase/network fails, local `localStorage` fallback keeps the game usable.
 - Audio uses Web Audio generated tones/noise; there are no external audio files.
 - The app has no build step and no package dependencies.

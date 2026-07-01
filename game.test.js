@@ -11,6 +11,7 @@ const {
   normalizePlayerName,
   createPlayerKey,
   mergeLeaderboardRecord,
+  queueDirection,
 } = require("./script.js");
 
 test("createInitialState creates a valid snake and food", () => {
@@ -18,11 +19,34 @@ test("createInitialState creates a valid snake and food", () => {
 
   assert.equal(state.gridSize, 24);
   assert.equal(state.mode, "running");
+  assert.equal(state.speedMs, 260);
   assert.equal(state.snake.length, 4);
   assert.equal(
     state.snake.some((cell) => cell.x === state.food.x && cell.y === state.food.y),
     false,
   );
+});
+
+test("queueDirection preserves rapid valid turns across movement ticks", () => {
+  const state = createInitialState({ gridSize: 8, rng: () => 0.8 });
+  state.snake = [
+    { x: 4, y: 4 },
+    { x: 3, y: 4 },
+    { x: 2, y: 4 },
+  ];
+  state.direction = { x: 1, y: 0 };
+  state.pendingDirection = { x: 1, y: 0 };
+  state.directionQueue = [];
+
+  let queued = queueDirection(state, { x: 0, y: 1 });
+  queued = queueDirection(queued, { x: -1, y: 0 });
+
+  const firstStep = stepGame(queued, () => 0.9);
+  const secondStep = stepGame(firstStep, () => 0.9);
+
+  assert.deepEqual(firstStep.snake[0], { x: 4, y: 5 });
+  assert.deepEqual(secondStep.snake[0], { x: 3, y: 5 });
+  assert.deepEqual(secondStep.direction, { x: -1, y: 0 });
 });
 
 test("createFood skips cells occupied by the snake", () => {
@@ -73,13 +97,13 @@ test("stepGame increases level after every fifth food", () => {
   state.food = { x: 3, y: 2 };
   state.foodsEaten = 4;
   state.level = 1;
-  state.speedMs = 130;
+  state.speedMs = 260;
 
   const next = stepGame(state, () => 0.9);
 
   assert.equal(next.foodsEaten, 5);
   assert.equal(next.level, 2);
-  assert.ok(next.speedMs < 130);
+  assert.ok(next.speedMs < 260);
 });
 
 test("stepGame ends the game on wall collision", () => {
